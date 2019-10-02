@@ -1,5 +1,5 @@
 /*!
- * Materialize v0.100.2 (http://materializecss.com)
+ * Materialize vundefined (http://materializecss.com)
  * Copyright 2014-2017 Materialize
  * MIT License (https://raw.githubusercontent.com/Dogfalo/materialize/master/LICENSE)
  */
@@ -4852,6 +4852,12 @@ if (Vel) {
       var uniqueID = Materialize.guid();
       $select.attr('data-select-id', uniqueID);
       var wrapper = $('<div class="select-wrapper"></div>');
+
+      // to fix Chrome 73 bug
+      wrapper.click(function (e) {
+        e.stopPropagation();
+      });
+
       wrapper.addClass($select.attr('class'));
       if ($select.is(':disabled')) wrapper.addClass('disabled');
       var options = $('<ul id="select-options-' + uniqueID + '" class="dropdown-content select-dropdown ' + (multiple ? 'multiple-select-dropdown' : '') + '"></ul>'),
@@ -6860,6 +6866,8 @@ if (Vel) {
 
     /**
      * Prepare the input element with all bindings.
+     * The contents of this function are copied from pickadate v3.6.3
+     * https://github.com/amsul/pickadate.js/blob/master/lib/picker.js
      */
     function prepareElement() {
 
@@ -6871,22 +6879,35 @@ if (Vel) {
       // Add the “input” class name.
       addClass(CLASSES.input).
 
-      // Remove the tabindex.
-      attr('tabindex', -1).
-
       // If there’s a `data-value`, update the value of the element.
-      val($ELEMENT.data('value') ? P.get('select', SETTINGS.format) : ELEMENT.value);
+      val($ELEMENT.data('value') ? P.get('select', SETTINGS.format) : ELEMENT.value).
+
+      // On focus/click, open the picker.
+      on('focus.' + STATE.id + ' click.' + STATE.id, debounce(function (event) {
+        event.preventDefault();
+        P.open();
+      }, 150))
+
+      // Mousedown handler to capture when the user starts interacting
+      // with the picker. This is used in working around a bug in Chrome 73.
+      .on('mousedown', function () {
+        STATE.handlingOpen = true;
+        var handler = function () {
+          // By default mouseup events are fired before a click event.
+          // By using a timeout we can force the mouseup to be handled
+          // after the corresponding click event is handled.
+          setTimeout(function () {
+            $(document).off('mouseup', handler);
+            STATE.handlingOpen = false;
+          }, 0);
+        };
+        $(document).on('mouseup', handler);
+      });
 
       // Only bind keydown events if the element isn’t editable.
       if (!SETTINGS.editable) {
 
         $ELEMENT.
-
-        // On focus/click, focus onto the root to open it up.
-        on('focus.' + STATE.id + ' click.' + STATE.id, function (event) {
-          event.preventDefault();
-          P.$root.eq(0).focus();
-        }).
 
         // Handle keyboard event based on the picker being opened or not.
         on('keydown.' + STATE.id, handleKeydownEvent);
@@ -6899,6 +6920,22 @@ if (Vel) {
         readonly: false,
         owns: ELEMENT.id + '_root'
       });
+    }
+
+    function debounce(func, wait, immediate) {
+      var timeout;
+      return function () {
+        var context = this,
+            args = arguments;
+        var later = function () {
+          timeout = null;
+          if (!immediate) func.apply(context, args);
+        };
+        var callNow = immediate && !timeout;
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+        if (callNow) func.apply(context, args);
+      };
     }
 
     /**
@@ -8983,12 +9020,15 @@ if (Vel) {
     this.locate();
     this.isShown = true;
     // Hide when clicking or tabbing on any element except the clock and input
-    $doc.on('click.clockpicker.' + this.id + ' focusin.clockpicker.' + this.id, function (e) {
-      var target = $(e.target);
-      if (target.closest(self.popover.find('.picker__wrap')).length === 0 && target.closest(self.input).length === 0) {
-        self.hide();
-      }
-    });
+    var $this = this;
+    setTimeout(function () {
+      $doc.on('click.clockpicker.' + $this.id + ' focusin.clockpicker.' + $this.id, function (e) {
+        var target = $(e.target);
+        if (target.closest(self.popover.find('.picker__wrap')).length === 0 && target.closest(self.input).length === 0) {
+          self.hide();
+        }
+      });
+    }, 100);
     // Hide when ESC is pressed
     $doc.on('keyup.clockpicker.' + this.id, function (e) {
       if (e.keyCode === 27) {
